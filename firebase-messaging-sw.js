@@ -6,7 +6,7 @@ importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-comp
 
 // Initialize the Firebase app in the service worker by passing in the messagingSenderId.
 firebase.initializeApp({
-  messagingSenderId: "YOUR_SENDER_ID" // MATCH THIS TO firebase-config.ts
+  messagingSenderId: "595903573586" // MATCH THIS TO firebase-config.ts
 });
 
 const messaging = firebase.messaging();
