@@ -24,8 +24,13 @@ export const isFCMSupported = async (): Promise<boolean> => {
 const getMessagingSafe = async (): Promise<Messaging | null> => {
   if (messagingInstance) return messagingInstance;
   if (await isFCMSupported()) {
-    messagingInstance = getMessaging(app);
-    return messagingInstance;
+    try {
+      messagingInstance = getMessaging(app);
+      return messagingInstance;
+    } catch (err) {
+      console.warn('Messaging initialization failed:', err);
+      return null;
+    }
   }
   return null;
 };
@@ -33,7 +38,7 @@ const getMessagingSafe = async (): Promise<Messaging | null> => {
 export const requestNotificationPermission = async (): Promise<string | null> => {
   const messaging = await getMessagingSafe();
   if (!messaging || !('Notification' in window)) {
-    throw new Error('Push Notifications are not supported in this browser environment.');
+    throw new Error('Push Notifications are not supported in this browser environment. Ensure you have added the app to your Home Screen.');
   }
 
   try {
