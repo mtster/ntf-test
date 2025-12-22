@@ -1,0 +1,7 @@
+{
+  "name": "FCM iOS Tester",
+  "description": "A high-fidelity PWA for testing Firebase Cloud Messaging on iOS 18+, featuring native-style UI and easy token management.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
