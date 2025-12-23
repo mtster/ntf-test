@@ -1,49 +1,20 @@
 
 /**
  * Firebase Project Configuration
- * Uses environment variables for configuration.
- * Safely handles environments where import.meta.env might be undefined.
+ * Using hardcoded values for the ntf-test-64abf project.
  */
-
-/**
- * Helper to safely retrieve environment variables across different runtimes.
- * It checks Vite's import.meta.env first, then falls back to process.env.
- */
-const getEnv = (key: string): string => {
-  // 1. Try import.meta.env (Vite/ESM standard)
-  try {
-    const meta = import.meta as any;
-    if (meta && meta.env && meta.env[key] !== undefined) {
-      return meta.env[key];
-    }
-  } catch (e) {
-    // import.meta might not be supported in some environments
-  }
-
-  // 2. Try process.env (Node/CommonJS/Bundler fallback)
-  try {
-    if (typeof process !== 'undefined' && process.env && process.env[key] !== undefined) {
-      return process.env[key] as string;
-    }
-  } catch (e) {
-    // process might not be defined
-  }
-
-  // 3. Fallback to empty string to prevent "undefined is not an object" errors
-  return "";
-};
 
 export const FIREBASE_CONFIG = {
-  apiKey: getEnv('VITE_FIREBASE_API_KEY'),
-  authDomain: getEnv('VITE_FIREBASE_AUTH_DOMAIN'),
-  projectId: getEnv('VITE_FIREBASE_PROJECT_ID'),
-  storageBucket: getEnv('VITE_FIREBASE_STORAGE_BUCKET'),
-  messagingSenderId: getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID'),
-  appId: getEnv('VITE_FIREBASE_APP_ID')
+  apiKey: "AIzaSyAfKsRB46yjdh6J0Nmt0u-XvTpR88A-cRA",
+  authDomain: "ntf-test-64abf.firebaseapp.com",
+  projectId: "ntf-test-64abf",
+  storageBucket: "ntf-test-64abf.firebasestorage.app",
+  messagingSenderId: "595903573586",
+  appId: "1:595903573586:web:ec7ed0bffb13cc47d5f98b"
 };
 
 /**
  * VAPID KEY
  * Used for Web Push certificates.
  */
-export const VAPID_KEY = getEnv('VITE_FIREBASE_VAPID_KEY');
+export const VAPID_KEY = "BPK6E41SC9Uh334nT5jAGxTVkuUwOpPKaoGDHUnmUHRR5XLiC33A-lwfvvDKSQo8vYviNIfUCn-ot_QeThEP5g8";

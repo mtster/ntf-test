@@ -3,15 +3,14 @@
 importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
 
-// These values are typically hardcoded in the SW or injected during build.
-// Note: Messaging requires at least the messagingSenderId to function in the background.
+// Initialize Firebase in the service worker with hardcoded values
 firebase.initializeApp({
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyAfKsRB46yjdh6J0Nmt0u-XvTpR88A-cRA",
+  authDomain: "ntf-test-64abf.firebaseapp.com",
+  projectId: "ntf-test-64abf",
+  storageBucket: "ntf-test-64abf.firebasestorage.app",
+  messagingSenderId: "595903573586",
+  appId: "1:595903573586:web:ec7ed0bffb13cc47d5f98b"
 });
 
 const messaging = firebase.messaging();
