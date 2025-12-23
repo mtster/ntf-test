@@ -1,4 +1,3 @@
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
@@ -15,15 +14,18 @@ root.render(
   </React.StrictMode>
 );
 
-// Register Service Worker for PWA features
+// Register the Consolidated Service Worker
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
+    // We register the firebase-messaging-sw.js directly as it now contains both
+    // the FCM logic and the caching logic.
+    navigator.serviceWorker.register('/firebase-messaging-sw.js')
       .then(registration => {
-        console.log('SW registered: ', registration);
+        console.log('Main SW registered successfully with scope: ', registration.scope);
       })
-      .catch(registrationError => {
-        console.log('SW registration failed: ', registrationError);
+      .catch(err => {
+        console.error('Main SW registration failed:', err);
+        console.error('Message:', err.message);
       });
   });
 }

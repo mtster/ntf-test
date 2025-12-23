@@ -1,4 +1,3 @@
-
 import { initializeApp } from 'firebase/app';
 import { getMessaging, getToken, onMessage, isSupported, Messaging } from 'firebase/messaging';
 import { FIREBASE_CONFIG, VAPID_KEY } from '../firebase-config';
@@ -45,21 +44,27 @@ export const requestNotificationPermission = async (): Promise<string | null> =>
     if (permission === 'granted') {
       console.log('Notification permission granted.');
 
-      // 1. Manually register the service worker to ensure it is found
-      // We explicitly point to the root /firebase-messaging-sw.js which must exist in your public/ folder
-      let registration;
-      try {
-         registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
-          scope: '/'
-        });
-        console.log('Service Worker registered successfully:', registration);
-      } catch (swError) {
-        console.error('Service Worker registration failed. Ensure firebase-messaging-sw.js is in the public folder.', swError);
-        throw new Error('Failed to register Service Worker');
+      // 1. Get the existing Service Worker registration
+      // We expect index.tsx to have already registered '/firebase-messaging-sw.js'
+      let registration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
+
+      // Fallback: If not found, try to register it explicitly
+      if (!registration) {
+        console.warn('SW not found, registering manually...');
+        try {
+          registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+            scope: '/'
+          });
+        } catch (swError) {
+          console.error('Manual SW registration failed:', swError);
+          throw new Error('Failed to register Service Worker for FCM.');
+        }
       }
 
-      // 2. Request the token using the manual registration
-      // This tells Firebase exactly which SW to use, bypassing auto-detection issues
+      console.log('Using Service Worker registration:', registration);
+
+      // 2. Request the token using the registration
+      // This is crucial for valid FCM token generation
       const token = await getToken(messaging, { 
         vapidKey: VAPID_KEY,
         serviceWorkerRegistration: registration 

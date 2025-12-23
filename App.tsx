@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Bell, 
@@ -21,6 +20,7 @@ const App: React.FC = () => {
       : 'default'
   );
   const [isSupported, setIsSupported] = useState<boolean | null>(null);
+  const [isIOSStandalone, setIsIOSStandalone] = useState<boolean>(true);
   const [fcmToken, setFcmToken] = useState<string>('');
   const [isRequesting, setIsRequesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +28,17 @@ const App: React.FC = () => {
   const [lastMessage, setLastMessage] = useState<any>(null);
 
   useEffect(() => {
+    // Check for iOS Standalone mode
+    const checkStandalone = () => {
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+      const isStandalone = (window.navigator as any).standalone === true;
+      // If it is iOS but NOT standalone, we need to warn user
+      if (isIOS && !isStandalone) {
+        setIsIOSStandalone(false);
+      }
+    };
+    checkStandalone();
+
     // Check for environment support on mount
     isFCMSupported().then(supported => {
       setIsSupported(supported);
@@ -113,21 +124,34 @@ const App: React.FC = () => {
       </header>
 
       <main className="flex-1 px-4 space-y-6">
-        {/* Support Check Warning */}
-        {!isSupported && (
+        {/* iOS Install Warning */}
+        {!isIOSStandalone && (
           <section className="bg-amber-50 rounded-3xl p-6 border border-amber-200 space-y-4 animate-in fade-in zoom-in-95 duration-300">
             <div className="flex items-center gap-3 text-amber-800">
               <Info size={24} className="shrink-0" />
-              <h2 className="text-lg font-bold">PWA Install Required</h2>
+              <h2 className="text-lg font-bold">iOS Install Required</h2>
             </div>
             <p className="text-sm text-amber-700 leading-relaxed">
-              To test Push Notifications on iOS, you must install this app to your Home Screen:
+              To test Push Notifications on iOS 18+, you must add this app to your Home Screen.
             </p>
             <ol className="text-sm text-amber-700 space-y-2 list-decimal list-inside font-medium">
               <li className="flex items-center gap-2">Tap the Share icon <Share size={16} /></li>
               <li>Select "Add to Home Screen"</li>
-              <li>Open the app from your Home Screen</li>
+              <li>Launch from Home Screen</li>
             </ol>
+          </section>
+        )}
+
+        {/* General Support Warning (Desktop/Android legacy) */}
+        {!isSupported && isIOSStandalone && (
+          <section className="bg-red-50 rounded-3xl p-6 border border-red-200 space-y-4">
+            <div className="flex items-center gap-3 text-red-800">
+              <AlertCircle size={24} className="shrink-0" />
+              <h2 className="text-lg font-bold">Not Supported</h2>
+            </div>
+            <p className="text-sm text-red-700 leading-relaxed">
+              Push notifications are not supported in this browser environment. If you are on iOS, ensure you have installed the app.
+            </p>
           </section>
         )}
 
