@@ -49,19 +49,23 @@ export const requestNotificationPermission = async (): Promise<string | null> =>
     if (permission === 'granted') {
       console.log('Notification permission granted.');
 
-      // CRITICAL CHANGE: Manually register the Service Worker first
-      // This ensures we have a valid registration to pass to getToken, which is required
-      // for stable operation on iOS 17/18 PWA.
-      let registration;
+      // 1. Ensure registration exists by calling register. 
+      // If it's already registered, this is a no-op that returns the registration.
       try {
-        registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-        console.log('SW Registered for Token Request:', registration);
+        await navigator.serviceWorker.register('/firebase-messaging-sw.js');
       } catch (swErr) {
         console.error('Failed to register SW during token request:', swErr);
         throw new Error('Service Worker registration failed.');
       }
 
-      // Request the token using the explicit registration
+      // 2. WAIT for it to be ready. 
+      // This is the specific fix for "Subscribing for push requires an active service worker".
+      // It ensures the SW is in the 'active' state before we ask Firebase to use it.
+      console.log('Waiting for SW to be ready...');
+      const registration = await navigator.serviceWorker.ready;
+      console.log('SW is ready:', registration);
+
+      // 3. Request the token using the ready registration
       const token = await getToken(messaging, { 
         vapidKey: VAPID_KEY,
         serviceWorkerRegistration: registration 
