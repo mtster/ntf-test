@@ -49,21 +49,15 @@ export const requestNotificationPermission = async (): Promise<string | null> =>
     if (permission === 'granted') {
       console.log('Notification permission granted.');
 
-      // 1. Ensure registration exists by calling register. 
-      // If it's already registered, this is a no-op that returns the registration.
-      try {
-        await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-      } catch (swErr) {
-        console.error('Failed to register SW during token request:', swErr);
-        throw new Error('Service Worker registration failed.');
-      }
-
-      // 2. WAIT for it to be ready. 
+      // 1. Ensure registration exists
+      // We explicitly register the worker located at the root (rewritten to public/)
+      await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      
+      // 2. WAIT for it to be ready
       // This is the specific fix for "Subscribing for push requires an active service worker".
-      // It ensures the SW is in the 'active' state before we ask Firebase to use it.
-      console.log('Waiting for SW to be ready...');
+      console.log('Waiting for Service Worker to be ready...');
       const registration = await navigator.serviceWorker.ready;
-      console.log('SW is ready:', registration);
+      console.log('Service Worker is ready:', registration);
 
       // 3. Request the token using the ready registration
       const token = await getToken(messaging, { 
@@ -71,6 +65,7 @@ export const requestNotificationPermission = async (): Promise<string | null> =>
         serviceWorkerRegistration: registration 
       });
       
+      console.log("FCM TOKEN RETRIEVED:", token);
       return token;
     } else {
       console.warn('Notification permission denied.');

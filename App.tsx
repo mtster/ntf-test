@@ -9,7 +9,8 @@ import {
   ShieldCheck,
   Zap,
   Info,
-  Share
+  Share,
+  Trash2
 } from 'lucide-react';
 import { requestNotificationPermission, onMessageListener, isFCMSupported } from './services/firebaseService';
 
@@ -27,28 +28,39 @@ const App: React.FC = () => {
   const [copied, setCopied] = useState(false);
   const [lastMessage, setLastMessage] = useState<any>(null);
 
+  // 1. Initial Checks & Auto-fetch
   useEffect(() => {
-    // Check for iOS Standalone mode
-    const checkStandalone = () => {
+    const checkEnvironment = async () => {
+      // Standalone check
       const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
       const isStandalone = (window.navigator as any).standalone === true;
-      // If it is iOS but NOT standalone, we need to warn user
       if (isIOS && !isStandalone) {
         setIsIOSStandalone(false);
       }
-    };
-    checkStandalone();
 
-    // Check for environment support on mount
-    isFCMSupported().then(supported => {
+      // FCM Support Check
+      const supported = await isFCMSupported();
       setIsSupported(supported);
+      
       if (supported && 'Notification' in window) {
         setPermissionStatus(Notification.permission);
+        
+        // Restore from Local Storage
+        const savedToken = localStorage.getItem('fcm_token');
+        if (savedToken) {
+          setFcmToken(savedToken);
+        } else if (Notification.permission === 'granted') {
+          // Auto-fetch if granted but no token (and not currently requesting)
+          // We wrap in a small timeout to ensure hydration is complete
+          setTimeout(() => handleEnableNotifications(), 500);
+        }
       }
-    });
+    };
 
-    // Listen for foreground messages if permission is granted
-    if (permissionStatus === 'granted') {
+    checkEnvironment();
+
+    // Listen for foreground messages
+    if (Notification.permission === 'granted') {
       onMessageListener()
         .then((payload) => {
           if (payload) {
@@ -58,15 +70,28 @@ const App: React.FC = () => {
         })
         .catch((err) => console.error('Failed to set message listener', err));
     }
-  }, [permissionStatus]);
+  }, []);
 
   const handleEnableNotifications = async () => {
+    // Prevent double clicks
+    if (isRequesting) return;
+    
     setIsRequesting(true);
     setError(null);
+
+    // Safety timeout: Reset loading state if it takes too long (e.g., network hang)
+    const safetyTimeout = setTimeout(() => {
+        if (isRequesting) {
+            setIsRequesting(false);
+            setError("Request timed out. Please try again.");
+        }
+    }, 15000);
+
     try {
       const token = await requestNotificationPermission();
       if (token) {
         setFcmToken(token);
+        localStorage.setItem('fcm_token', token); // Persist token
         setPermissionStatus('granted');
       } else {
         const currentPerm = 'Notification' in window ? Notification.permission : 'default';
@@ -79,7 +104,18 @@ const App: React.FC = () => {
       console.error(err);
       setError(err.message || 'An unexpected error occurred.');
     } finally {
+      clearTimeout(safetyTimeout);
       setIsRequesting(false);
+    }
+  };
+
+  const handleReset = () => {
+    if (confirm("Clear token and reset state?")) {
+      setFcmToken('');
+      setLastMessage(null);
+      localStorage.removeItem('fcm_token');
+      setError(null);
+      window.location.reload();
     }
   };
 
@@ -106,7 +142,6 @@ const App: React.FC = () => {
     );
   };
 
-  // If we haven't checked support yet, show a clean loader
   if (isSupported === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F2F2F7]">
@@ -142,7 +177,7 @@ const App: React.FC = () => {
           </section>
         )}
 
-        {/* General Support Warning (Desktop/Android legacy) */}
+        {/* General Support Warning */}
         {!isSupported && isIOSStandalone && (
           <section className="bg-red-50 rounded-3xl p-6 border border-red-200 space-y-4">
             <div className="flex items-center gap-3 text-red-800">
@@ -162,7 +197,8 @@ const App: React.FC = () => {
             <StatusPill status={permissionStatus} />
           </div>
           
-          {permissionStatus !== 'granted' && (
+          {/* Button shows if not granted OR if we don't have a token yet (even if granted) */}
+          {(!fcmToken) && (
             <button
               onClick={handleEnableNotifications}
               disabled={isRequesting || !isSupported}
@@ -177,7 +213,7 @@ const App: React.FC = () => {
               ) : (
                 <Bell size={20} />
               )}
-              {isRequesting ? 'Requesting...' : 'Enable Notifications'}
+              {isRequesting ? 'Retrieving Token...' : (permissionStatus === 'granted' ? 'Get Token' : 'Enable Notifications')}
             </button>
           )}
 
@@ -191,19 +227,28 @@ const App: React.FC = () => {
 
         {/* Token Section */}
         {fcmToken && (
-          <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4">
+          <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
                 <Zap className="text-amber-500" size={18} />
                 Registration Token
               </h2>
-              <button 
-                onClick={copyToClipboard}
-                className="p-2 hover:bg-slate-100 rounded-full transition-colors"
-                title="Copy Token"
-              >
-                {copied ? <CheckCircle className="text-green-500" size={20} /> : <Copy className="text-slate-400" size={20} />}
-              </button>
+              <div className="flex gap-2">
+                <button 
+                  onClick={handleReset}
+                  className="p-2 hover:bg-red-50 hover:text-red-500 text-slate-400 rounded-full transition-colors"
+                  title="Reset"
+                >
+                  <Trash2 size={20} />
+                </button>
+                <button 
+                  onClick={copyToClipboard}
+                  className="p-2 hover:bg-slate-100 rounded-full transition-colors"
+                  title="Copy Token"
+                >
+                  {copied ? <CheckCircle className="text-green-500" size={20} /> : <Copy className="text-slate-400" size={20} />}
+                </button>
+              </div>
             </div>
             
             <textarea
@@ -212,6 +257,7 @@ const App: React.FC = () => {
               className="w-full h-32 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-mono text-slate-600 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               onClick={(e) => (e.target as HTMLTextAreaElement).select()}
             />
+            <p className="text-xs text-center text-slate-400">Token saved to local storage</p>
           </section>
         )}
 
