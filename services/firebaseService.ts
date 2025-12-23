@@ -50,8 +50,9 @@ export const requestNotificationPermission = async (): Promise<string | null> =>
       console.log('Notification permission granted.');
 
       // 1. Get the existing Service Worker registration
-      // We look for the one registered at root scope
-      let registration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
+      // We check for any registration controlling this page (defaults to current scope)
+      // This avoids SecurityError issues with explicit paths
+      let registration = await navigator.serviceWorker.getRegistration();
 
       // Fallback: If not found, try to register it explicitly
       if (!registration) {

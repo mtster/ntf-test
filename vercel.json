@@ -33,7 +33,15 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!firebase-messaging-sw\\.js|manifest\\.json|.*\\.png|.*\\.ico).*)",
+      "source": "/icon-(.*).png",
+      "destination": "/public/icon-$1.png"
+    },
+    {
+      "source": "/apple-touch-icon.png",
+      "destination": "/public/apple-touch-icon.png"
+    },
+    {
+      "source": "/((?!firebase-messaging-sw.js|manifest.json|public/|icon-.*.png|apple-touch-icon.png).*)",
       "destination": "/index.html"
     }
   ]
