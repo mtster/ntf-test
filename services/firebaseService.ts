@@ -10,7 +10,6 @@ let messagingInstance: Messaging | null = null;
 
 /**
  * Checks if FCM is supported in the current environment.
- * On iOS, this returns true only if the app is added to the Home Screen.
  */
 export const isFCMSupported = async (): Promise<boolean> => {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return false;
@@ -38,15 +37,27 @@ const getMessagingSafe = async (): Promise<Messaging | null> => {
 export const requestNotificationPermission = async (): Promise<string | null> => {
   const messaging = await getMessagingSafe();
   if (!messaging || !('Notification' in window)) {
-    throw new Error('Push Notifications are not supported in this browser environment. Ensure you have added the app to your Home Screen.');
+    throw new Error('Push Notifications are not supported. Ensure you have added the app to your Home Screen.');
   }
 
   try {
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
-      const token = await getToken(messaging, { 
-        vapidKey: VAPID_KEY 
+      // 1. Manually register the specific Firebase service worker
+      // This ensures we have a valid registration object to pass to getToken
+      console.log('Registering firebase-messaging-sw.js manually...');
+      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+        scope: '/'
       });
+      
+      console.log('Service Worker registered manually:', registration);
+
+      // 2. Request the token using the manual registration
+      const token = await getToken(messaging, { 
+        vapidKey: VAPID_KEY,
+        serviceWorkerRegistration: registration 
+      });
+      
       return token;
     }
     return null;

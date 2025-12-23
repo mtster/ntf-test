@@ -1,12 +1,6 @@
 
 {
   "cleanUrls": true,
-  "rewrites": [
-    {
-      "source": "/((?!.*\\.).*)",
-      "destination": "/index.html"
-    }
-  ],
   "headers": [
     {
       "source": "/firebase-messaging-sw.js",
@@ -16,12 +10,12 @@
           "value": "application/javascript"
         },
         {
-          "key": "Cache-Control",
-          "value": "no-cache, no-store, must-revalidate"
-        },
-        {
           "key": "Service-Worker-Allowed",
           "value": "/"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
         }
       ]
     },
@@ -33,12 +27,12 @@
           "value": "application/javascript"
         },
         {
-          "key": "Cache-Control",
-          "value": "no-cache, no-store, must-revalidate"
-        },
-        {
           "key": "Service-Worker-Allowed",
           "value": "/"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "no-cache, no-store, must-revalidate"
         }
       ]
     },
@@ -54,6 +48,20 @@
           "value": "no-cache, no-store, must-revalidate"
         }
       ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/firebase-messaging-sw.js",
+      "destination": "/firebase-messaging-sw.js"
+    },
+    {
+      "source": "/sw.js",
+      "destination": "/sw.js"
+    },
+    {
+      "source": "/((?!.*\\.).*)",
+      "destination": "/index.html"
     }
   ]
 }
