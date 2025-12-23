@@ -1,5 +1,4 @@
 {
-  "cleanUrls": true,
   "headers": [
     {
       "source": "/firebase-messaging-sw.js",
@@ -34,11 +33,7 @@
   ],
   "rewrites": [
     {
-      "source": "/firebase-messaging-sw.js",
-      "destination": "/firebase-messaging-sw.js"
-    },
-    {
-      "source": "/((?!.*\\.).*)",
+      "source": "/((?!firebase-messaging-sw\\.js|manifest\\.json|.*\\.png|.*\\.ico).*)",
       "destination": "/index.html"
     }
   ]

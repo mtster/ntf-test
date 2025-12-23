@@ -34,9 +34,14 @@ const getMessagingSafe = async (): Promise<Messaging | null> => {
 };
 
 export const requestNotificationPermission = async (): Promise<string | null> => {
+  // iOS 17+ specific check: Notification object might be undefined if not Added to Home Screen
+  if (typeof Notification === 'undefined') {
+    throw new Error('Push Notifications are not supported in this environment. If on iOS, ensure you have added the app to your Home Screen.');
+  }
+
   const messaging = await getMessagingSafe();
-  if (!messaging || !('Notification' in window)) {
-    throw new Error('Push Notifications are not supported. Ensure you have added the app to your Home Screen.');
+  if (!messaging) {
+    throw new Error('Firebase Messaging is not supported in this browser.');
   }
 
   try {
@@ -45,7 +50,7 @@ export const requestNotificationPermission = async (): Promise<string | null> =>
       console.log('Notification permission granted.');
 
       // 1. Get the existing Service Worker registration
-      // We expect index.tsx to have already registered '/firebase-messaging-sw.js'
+      // We look for the one registered at root scope
       let registration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
 
       // Fallback: If not found, try to register it explicitly
@@ -64,7 +69,6 @@ export const requestNotificationPermission = async (): Promise<string | null> =>
       console.log('Using Service Worker registration:', registration);
 
       // 2. Request the token using the registration
-      // This is crucial for valid FCM token generation
       const token = await getToken(messaging, { 
         vapidKey: VAPID_KEY,
         serviceWorkerRegistration: registration 
