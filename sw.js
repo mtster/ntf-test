@@ -1,3 +1,1 @@
-
-// This file is deprecated. 
-// Logic has been moved to firebase-messaging-sw.js.
+// This file is deprecated. Please use firebase-messaging-sw.js

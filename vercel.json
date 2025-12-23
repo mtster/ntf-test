@@ -33,6 +33,14 @@
   ],
   "rewrites": [
     {
+      "source": "/firebase-messaging-sw.js",
+      "destination": "/public/firebase-messaging-sw.js"
+    },
+    {
+      "source": "/manifest.json",
+      "destination": "/public/manifest.json"
+    },
+    {
       "source": "/icon-(.*).png",
       "destination": "/public/icon-$1.png"
     },

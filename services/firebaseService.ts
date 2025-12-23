@@ -49,27 +49,19 @@ export const requestNotificationPermission = async (): Promise<string | null> =>
     if (permission === 'granted') {
       console.log('Notification permission granted.');
 
-      // 1. Get the existing Service Worker registration
-      // We check for any registration controlling this page (defaults to current scope)
-      // This avoids SecurityError issues with explicit paths
-      let registration = await navigator.serviceWorker.getRegistration();
-
-      // Fallback: If not found, try to register it explicitly
-      if (!registration) {
-        console.warn('SW not found, registering manually...');
-        try {
-          registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
-            scope: '/'
-          });
-        } catch (swError) {
-          console.error('Manual SW registration failed:', swError);
-          throw new Error('Failed to register Service Worker for FCM.');
-        }
+      // CRITICAL CHANGE: Manually register the Service Worker first
+      // This ensures we have a valid registration to pass to getToken, which is required
+      // for stable operation on iOS 17/18 PWA.
+      let registration;
+      try {
+        registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        console.log('SW Registered for Token Request:', registration);
+      } catch (swErr) {
+        console.error('Failed to register SW during token request:', swErr);
+        throw new Error('Service Worker registration failed.');
       }
 
-      console.log('Using Service Worker registration:', registration);
-
-      // 2. Request the token using the registration
+      // Request the token using the explicit registration
       const token = await getToken(messaging, { 
         vapidKey: VAPID_KEY,
         serviceWorkerRegistration: registration 

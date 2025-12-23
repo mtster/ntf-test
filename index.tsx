@@ -18,17 +18,11 @@ root.render(
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      // Register the service worker from the root.
-      // This ensures the origin matches the document origin exactly.
-      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { 
-        scope: '/' 
-      });
+      // Register the service worker pointing to the root URL (handled by rewrites to public/)
+      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
       console.log('Main SW registered successfully with scope:', registration.scope);
     } catch (err: any) {
       console.error('Main SW registration failed:', err);
-      if (err.name === 'SecurityError') {
-        console.error('SecurityError: The origin of the script must match the client origin. Ensure firebase-messaging-sw.js is served from the same domain and port, not a CDN or redirect.');
-      }
     }
   });
 }
