@@ -15,13 +15,15 @@ export const isFCMSupported = async (): Promise<boolean> => {
   try {
     return await isSupported();
   } catch (e) {
+    console.warn('FCM support check failed:', e);
     return false;
   }
 };
 
 const getMessagingSafe = async (): Promise<Messaging | null> => {
   if (messagingInstance) return messagingInstance;
-  if (await isFCMSupported()) {
+  const supported = await isFCMSupported();
+  if (supported) {
     try {
       messagingInstance = getMessaging(app);
       return messagingInstance;
@@ -36,7 +38,7 @@ const getMessagingSafe = async (): Promise<Messaging | null> => {
 export const requestNotificationPermission = async (): Promise<string | null> => {
   // iOS 17+ specific check: Notification object might be undefined if not Added to Home Screen
   if (typeof Notification === 'undefined') {
-    throw new Error('Push Notifications are not supported in this environment. If on iOS, ensure you have added the app to your Home Screen.');
+    throw new Error('Push Notifications are not supported. If on iOS, ensure you have added the app to your Home Screen.');
   }
 
   const messaging = await getMessagingSafe();
@@ -49,17 +51,16 @@ export const requestNotificationPermission = async (): Promise<string | null> =>
     if (permission === 'granted') {
       console.log('Notification permission granted.');
 
-      // 1. Ensure registration exists
-      // We explicitly register the worker located at the root (rewritten to public/)
-      await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      // 1. Explicitly register the Service Worker
+      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
       
-      // 2. WAIT for it to be ready
-      // This is the specific fix for "Subscribing for push requires an active service worker".
+      // 2. IMPORTANT: Wait for the Service Worker to be active/ready
+      // This prevents "Subscribing for push requires an active service worker" error
       console.log('Waiting for Service Worker to be ready...');
-      const registration = await navigator.serviceWorker.ready;
-      console.log('Service Worker is ready:', registration);
+      await navigator.serviceWorker.ready;
+      console.log('Service Worker is ready.');
 
-      // 3. Request the token using the ready registration
+      // 3. Get the token using the ready registration
       const token = await getToken(messaging, { 
         vapidKey: VAPID_KEY,
         serviceWorkerRegistration: registration 

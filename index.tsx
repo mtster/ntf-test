@@ -14,12 +14,11 @@ root.render(
   </React.StrictMode>
 );
 
-// Register the Consolidated Service Worker
+// Register the Consolidated Service Worker with root scope
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      // Register the service worker pointing to the root URL (handled by rewrites to public/)
-      // Explicitly set scope to '/' to ensure it covers all routes
+      // We rely on 'vercel.json' rewriting '/firebase-messaging-sw.js' to '/public/firebase-messaging-sw.js'
       const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
       console.log('Main SW registered successfully with scope:', registration.scope);
     } catch (err: any) {

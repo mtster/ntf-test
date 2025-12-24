@@ -30,37 +30,67 @@ const App: React.FC = () => {
 
   // 1. Initial Checks & Auto-fetch
   useEffect(() => {
-    const checkEnvironment = async () => {
-      // Standalone check
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-      const isStandalone = (window.navigator as any).standalone === true;
-      if (isIOS && !isStandalone) {
-        setIsIOSStandalone(false);
-      }
+    let mounted = true;
 
-      // FCM Support Check
-      const supported = await isFCMSupported();
-      setIsSupported(supported);
-      
-      if (supported && 'Notification' in window) {
-        setPermissionStatus(Notification.permission);
+    const checkEnvironment = async () => {
+      try {
+        // Standalone check
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+        const isStandalone = (window.navigator as any).standalone === true;
         
-        // Restore from Local Storage
-        const savedToken = localStorage.getItem('fcm_token');
-        if (savedToken) {
-          setFcmToken(savedToken);
-        } else if (Notification.permission === 'granted') {
-          // Auto-fetch if granted but no token (and not currently requesting)
-          // We wrap in a small timeout to ensure hydration is complete
-          setTimeout(() => handleEnableNotifications(), 500);
+        if (mounted) {
+          if (isIOS && !isStandalone) {
+            setIsIOSStandalone(false);
+          }
         }
+
+        // FCM Support Check
+        const supported = await isFCMSupported();
+        
+        if (mounted) {
+          setIsSupported(supported);
+          
+          if (supported && 'Notification' in window) {
+            setPermissionStatus(Notification.permission);
+            
+            // Restore from Local Storage
+            const savedToken = localStorage.getItem('fcm_token');
+            if (savedToken) {
+              setFcmToken(savedToken);
+            } else if (Notification.permission === 'granted') {
+              // Auto-fetch if granted but no token
+              // Use a small delay to ensure page is fully hydrated
+              setTimeout(() => {
+                if (mounted) handleEnableNotifications();
+              }, 500);
+            }
+          }
+        }
+      } catch (e) {
+        console.error("Initialization error:", e);
+        if (mounted) setIsSupported(false);
       }
     };
 
     checkEnvironment();
 
-    // Listen for foreground messages
-    if (Notification.permission === 'granted') {
+    // Fallback: If support check hangs for more than 3 seconds, assume supported=false to show UI
+    const timeoutId = setTimeout(() => {
+      if (mounted && isSupported === null) {
+        console.warn("Support check timed out, defaulting to false");
+        setIsSupported(false);
+      }
+    }, 3000);
+
+    return () => { 
+      mounted = false; 
+      clearTimeout(timeoutId);
+    };
+  }, []);
+
+  // Message Listener
+  useEffect(() => {
+    if (isSupported && permissionStatus === 'granted') {
       onMessageListener()
         .then((payload) => {
           if (payload) {
@@ -70,28 +100,27 @@ const App: React.FC = () => {
         })
         .catch((err) => console.error('Failed to set message listener', err));
     }
-  }, []);
+  }, [isSupported, permissionStatus]);
 
   const handleEnableNotifications = async () => {
-    // Prevent double clicks
     if (isRequesting) return;
     
     setIsRequesting(true);
     setError(null);
 
-    // Safety timeout: Reset loading state if it takes too long (e.g., network hang)
+    // Safety timeout prevents infinite loading state
     const safetyTimeout = setTimeout(() => {
-        if (isRequesting) {
-            setIsRequesting(false);
-            setError("Request timed out. Please try again.");
-        }
+        setIsRequesting((prev) => {
+          if (prev) setError("Request timed out. Please try again.");
+          return false;
+        });
     }, 15000);
 
     try {
       const token = await requestNotificationPermission();
       if (token) {
         setFcmToken(token);
-        localStorage.setItem('fcm_token', token); // Persist token
+        localStorage.setItem('fcm_token', token);
         setPermissionStatus('granted');
       } else {
         const currentPerm = 'Notification' in window ? Notification.permission : 'default';
@@ -142,6 +171,7 @@ const App: React.FC = () => {
     );
   };
 
+  // Loading State
   if (isSupported === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F2F2F7]">
@@ -177,7 +207,7 @@ const App: React.FC = () => {
           </section>
         )}
 
-        {/* General Support Warning */}
+        {/* Not Supported Warning */}
         {!isSupported && isIOSStandalone && (
           <section className="bg-red-50 rounded-3xl p-6 border border-red-200 space-y-4">
             <div className="flex items-center gap-3 text-red-800">
@@ -197,7 +227,6 @@ const App: React.FC = () => {
             <StatusPill status={permissionStatus} />
           </div>
           
-          {/* Button shows if not granted OR if we don't have a token yet (even if granted) */}
           {(!fcmToken) && (
             <button
               onClick={handleEnableNotifications}
