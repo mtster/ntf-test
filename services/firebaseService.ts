@@ -52,15 +52,44 @@ export const requestNotificationPermission = async (): Promise<string | null> =>
       console.log('Notification permission granted.');
 
       // 1. Explicitly register the Service Worker
+      // We use scope: '/' to ensure it controls the whole app
       const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
       
-      // 2. IMPORTANT: Wait for the Service Worker to be active/ready
-      // This prevents "Subscribing for push requires an active service worker" error
-      console.log('Waiting for Service Worker to be ready...');
-      await navigator.serviceWorker.ready;
-      console.log('Service Worker is ready.');
+      // 2. Wait for the Service Worker to be Active (with timeout fallback)
+      // This logic prevents the app from hanging if the SW state doesn't update immediately
+      const waitForActive = new Promise((resolve) => {
+        if (registration.active) {
+            resolve(registration.active);
+            return;
+        }
 
-      // 3. Get the token using the ready registration
+        const serviceWorker = registration.installing || registration.waiting;
+        if (serviceWorker) {
+            const stateListener = (e: Event) => {
+                if ((e.target as ServiceWorker).state === 'activated') {
+                    serviceWorker.removeEventListener('statechange', stateListener);
+                    resolve(registration.active);
+                }
+            };
+            serviceWorker.addEventListener('statechange', stateListener);
+        } else {
+             // If we can't find a worker to listen to, just resolve null and let the race condition handle it
+             resolve(null);
+        }
+      });
+
+      console.log('Waiting for Service Worker activation...');
+      
+      // Race: Wait for activation OR 5 seconds, then proceed.
+      // This ensures we attempt to get the token even if the 'statechange' event is missed.
+      await Promise.race([
+          waitForActive,
+          new Promise((resolve) => setTimeout(resolve, 5000))
+      ]);
+      
+      console.log('Proceeding to get token...');
+
+      // 3. Get the token using the registration
       const token = await getToken(messaging, { 
         vapidKey: VAPID_KEY,
         serviceWorkerRegistration: registration 

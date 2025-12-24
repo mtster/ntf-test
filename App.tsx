@@ -59,7 +59,7 @@ const App: React.FC = () => {
               setFcmToken(savedToken);
             } else if (Notification.permission === 'granted') {
               // Auto-fetch if granted but no token
-              // Use a small delay to ensure page is fully hydrated
+              // We use a small timeout to let the page settle, then fetch
               setTimeout(() => {
                 if (mounted) handleEnableNotifications();
               }, 500);
