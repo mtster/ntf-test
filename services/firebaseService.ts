@@ -86,20 +86,29 @@ export const requestNotificationPermission = async (): Promise<string | null> =>
       });
       console.log('[SW] Registration successful. Scope:', registration.scope);
 
-      // 2. Wait for Ready
+      // 2. Wait for Ready (with 3s Timeout Fallback)
       console.log('[SW] Waiting for navigator.serviceWorker.ready ...');
-      const readyRegistration = await navigator.serviceWorker.ready;
-      console.log('[SW] Ready! Active worker state:', readyRegistration.active?.state);
+      
+      const readyPromise = navigator.serviceWorker.ready;
+      
+      // If 'ready' hangs (e.g., SW installed but not active), we fallback to the registration we just got.
+      // This combined with skipWaiting() in the SW usually solves the issue.
+      const timeoutPromise = new Promise<ServiceWorkerRegistration>((resolve) => {
+        setTimeout(() => {
+            console.warn('[SW] navigator.serviceWorker.ready timed out (3s). Using initial registration to proceed.');
+            resolve(registration);
+        }, 3000);
+      });
 
-      if (!readyRegistration.active) {
-         console.warn('[SW] Ready returned, but .active is null?');
-      }
+      const finalRegistration = await Promise.race([readyPromise, timeoutPromise]);
+      
+      console.log('[SW] Final Registration Active State:', finalRegistration.active?.state || 'null');
 
       // 3. Get Token
       console.log('[FCM] Calling getToken...');
       const token = await getToken(messaging, { 
         vapidKey: VAPID_KEY,
-        serviceWorkerRegistration: readyRegistration 
+        serviceWorkerRegistration: finalRegistration 
       });
       
       console.log("[FCM] Token retrieved successfully.");

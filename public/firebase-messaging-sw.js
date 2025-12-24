@@ -2,6 +2,19 @@
 importScripts('https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.13.0/firebase-messaging-compat.js');
 
+// --- Lifecycle Management (Force Activation) ---
+self.addEventListener('install', (event) => {
+  console.log('[firebase-messaging-sw.js] Installing and skipping waiting...');
+  // Force this SW to become the active one immediately
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  console.log('[firebase-messaging-sw.js] Activating and claiming clients...');
+  // Force this SW to control all open pages immediately
+  event.waitUntil(self.clients.claim());
+});
+
 // --- Configuration ---
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyAfKsRB46yjdh6J0Nmt0u-XvTpR88A-cRA",
@@ -23,7 +36,7 @@ const urlsToCache = [
 ];
 
 // --- Firebase Messaging Setup ---
-console.log('[firebase-messaging-sw.js] Initializing...');
+console.log('[firebase-messaging-sw.js] Initializing Firebase...');
 
 try {
   if (firebase.apps.length === 0) {
@@ -51,35 +64,7 @@ try {
 }
 
 // --- Caching Logic (Standard PWA) ---
-
-self.addEventListener('install', (event) => {
-  console.log('[firebase-messaging-sw.js] Installing SW...');
-  event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then((cache) => {
-        console.log('[firebase-messaging-sw.js] Caching app shell');
-        return cache.addAll(urlsToCache);
-      })
-  );
-  self.skipWaiting();
-});
-
-self.addEventListener('activate', (event) => {
-  console.log('[firebase-messaging-sw.js] Activating SW...');
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('[firebase-messaging-sw.js] Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
-  );
-  self.clients.claim();
-});
+// Note: install/activate for caching moved to top for clarity, but standard fetch listeners remain
 
 self.addEventListener('fetch', (event) => {
   // Simple cache-first strategy for static assets

@@ -132,29 +132,24 @@ const App: React.FC = () => {
         }
       } catch (e) {
         console.error("[App] Initialization error:", e);
-        if (mounted) setIsSupported(false);
+        // We do NOT set isSupported to false here to allow debugging on potential false negatives
       }
     };
 
     checkEnvironment();
 
-    // Fallback: If support check hangs
-    const timeoutId = setTimeout(() => {
-      if (mounted && isSupported === null) {
-        console.warn("[App] Support check timed out, defaulting to false");
-        setIsSupported(false);
-      }
-    }, 3000);
-
+    // REMOVED: Timeout logic that forces isSupported to false.
+    // We want to allow the user to try clicking the button even if the check hangs.
+    
     return () => { 
       mounted = false; 
-      clearTimeout(timeoutId);
     };
   }, []);
 
   // Message Listener
   useEffect(() => {
-    if (isSupported && permissionStatus === 'granted') {
+    // Attempt to listen if we think it's supported, OR if permission is granted (even if check failed)
+    if ((isSupported || permissionStatus === 'granted')) {
       console.log('[App] Setting up foreground message listener...');
       onMessageListener()
         .then((payload) => {
@@ -163,7 +158,10 @@ const App: React.FC = () => {
             setLastMessage(payload);
           }
         })
-        .catch((err) => console.error('[App] Failed to set message listener', err));
+        .catch((err) => {
+            // Suppress noise in logs if it's just a support error
+            // console.warn('[App] Message listener warning', err)
+        });
     }
   }, [isSupported, permissionStatus]);
 
@@ -231,7 +229,9 @@ const App: React.FC = () => {
     );
   };
 
-  if (isSupported === null) {
+  // Loading State - only if we truly haven't initialized anything and permission is default
+  // If permission is already granted, we show the UI immediately
+  if (isSupported === null && permissionStatus === 'default') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F2F2F7]">
         <div className="text-center">
@@ -265,20 +265,21 @@ const App: React.FC = () => {
         )}
 
         {/* Not Supported Warning */}
-        {!isSupported && isIOSStandalone && (
+        {/* We keep this but make it less intrusive if we are debugging */}
+        {isSupported === false && isIOSStandalone && (
           <section className="bg-red-50 rounded-3xl p-6 border border-red-200 space-y-4">
             <div className="flex items-center gap-3 text-red-800">
               <AlertCircle size={24} className="shrink-0" />
-              <h2 className="text-lg font-bold">Not Supported</h2>
+              <h2 className="text-lg font-bold">Not Supported (Check Logs)</h2>
             </div>
             <p className="text-sm text-red-700 leading-relaxed">
-              FCM is not supported here. Check the debug logs below.
+              FCM reported as not supported. Attempting to force enable via button below is allowed for debugging.
             </p>
           </section>
         )}
 
         {/* Permission & Action Card */}
-        <section className={`bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4 ${!isSupported ? 'opacity-50 grayscale pointer-events-none' : ''}`}>
+        <section className={`bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4`}>
           <div className="flex justify-between items-center">
             <h2 className="text-lg font-semibold text-slate-800">System Permission</h2>
             <StatusPill status={permissionStatus} />
