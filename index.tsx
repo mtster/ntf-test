@@ -14,15 +14,16 @@ root.render(
   </React.StrictMode>
 );
 
-// Register the Consolidated Service Worker with root scope
+// Basic Service Worker Registration for PWA Installability
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
-      // We rely on 'vercel.json' rewriting '/firebase-messaging-sw.js' to '/public/firebase-messaging-sw.js'
-      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
-      console.log('Main SW registered successfully with scope:', registration.scope);
+      // We just register it here to ensure the browser sees the PWA as installable.
+      // The actual "use" of the SW for FCM happens in firebaseService.ts
+      await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
+      console.log('[Index] Main SW registered.');
     } catch (err: any) {
-      console.error('Main SW registration failed:', err);
+      console.error('[Index] Main SW registration failed:', err);
     }
   });
 }

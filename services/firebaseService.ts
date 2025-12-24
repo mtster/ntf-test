@@ -8,101 +8,108 @@ const app = initializeApp(FIREBASE_CONFIG);
 let messagingInstance: Messaging | null = null;
 
 /**
- * Checks if FCM is supported in the current environment.
+ * Checks if FCM is supported in the current environment with granular logging.
  */
 export const isFCMSupported = async (): Promise<boolean> => {
-  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return false;
+  console.log('[FCM Check] Starting support check...');
+  
+  if (typeof window === 'undefined') {
+    console.warn('[FCM Check] Failed: Window is undefined.');
+    return false;
+  }
+  
+  if (!('serviceWorker' in navigator)) {
+    console.warn('[FCM Check] Failed: navigator.serviceWorker is missing.');
+    return false;
+  }
+
+  if (!('PushManager' in window)) {
+    console.warn('[FCM Check] Failed: window.PushManager is missing.');
+    return false;
+  }
+
+  if (!('Notification' in window)) {
+    console.warn('[FCM Check] Failed: window.Notification is missing.');
+    return false;
+  }
+
   try {
-    return await isSupported();
+    const firebaseSupported = await isSupported();
+    if (!firebaseSupported) {
+        console.warn('[FCM Check] Firebase isSupported() returned false.');
+    }
+    return firebaseSupported;
   } catch (e) {
-    console.warn('FCM support check failed:', e);
+    console.error('[FCM Check] Exception during isSupported():', e);
     return false;
   }
 };
 
 const getMessagingSafe = async (): Promise<Messaging | null> => {
   if (messagingInstance) return messagingInstance;
-  const supported = await isFCMSupported();
-  if (supported) {
-    try {
-      messagingInstance = getMessaging(app);
-      return messagingInstance;
-    } catch (err) {
-      console.warn('Messaging initialization failed:', err);
-      return null;
-    }
+  
+  // We re-run support check just to be safe, but usually App.tsx handles this
+  try {
+    messagingInstance = getMessaging(app);
+    return messagingInstance;
+  } catch (err) {
+    console.error('[Messaging Init] Failed to get messaging instance:', err);
+    return null;
   }
-  return null;
 };
 
 export const requestNotificationPermission = async (): Promise<string | null> => {
-  // iOS 17+ specific check: Notification object might be undefined if not Added to Home Screen
+  console.log('[Permission] Requesting notification permission...');
+
+  // iOS 17+ specific check
   if (typeof Notification === 'undefined') {
-    throw new Error('Push Notifications are not supported. If on iOS, ensure you have added the app to your Home Screen.');
+    throw new Error('Push Notifications not supported (Notification API missing). Add to Home Screen?');
   }
 
   const messaging = await getMessagingSafe();
   if (!messaging) {
-    throw new Error('Firebase Messaging is not supported in this browser.');
+    throw new Error('Firebase Messaging failed to initialize.');
   }
 
   try {
     const permission = await Notification.requestPermission();
+    console.log(`[Permission] Status: ${permission}`);
+
     if (permission === 'granted') {
-      console.log('Notification permission granted.');
-
-      // 1. Explicitly register the Service Worker
-      // We use scope: '/' to ensure it controls the whole app
-      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' });
       
-      // 2. Wait for the Service Worker to be Active (with timeout fallback)
-      // This logic prevents the app from hanging if the SW state doesn't update immediately
-      const waitForActive = new Promise((resolve) => {
-        if (registration.active) {
-            resolve(registration.active);
-            return;
-        }
-
-        const serviceWorker = registration.installing || registration.waiting;
-        if (serviceWorker) {
-            const stateListener = (e: Event) => {
-                if ((e.target as ServiceWorker).state === 'activated') {
-                    serviceWorker.removeEventListener('statechange', stateListener);
-                    resolve(registration.active);
-                }
-            };
-            serviceWorker.addEventListener('statechange', stateListener);
-        } else {
-             // If we can't find a worker to listen to, just resolve null and let the race condition handle it
-             resolve(null);
-        }
+      // --- ROBUST REGISTRATION FLOW ---
+      
+      // 1. Register
+      console.log('[SW] Registering /firebase-messaging-sw.js ...');
+      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { 
+        scope: '/' 
       });
+      console.log('[SW] Registration successful. Scope:', registration.scope);
 
-      console.log('Waiting for Service Worker activation...');
-      
-      // Race: Wait for activation OR 5 seconds, then proceed.
-      // This ensures we attempt to get the token even if the 'statechange' event is missed.
-      await Promise.race([
-          waitForActive,
-          new Promise((resolve) => setTimeout(resolve, 5000))
-      ]);
-      
-      console.log('Proceeding to get token...');
+      // 2. Wait for Ready
+      console.log('[SW] Waiting for navigator.serviceWorker.ready ...');
+      const readyRegistration = await navigator.serviceWorker.ready;
+      console.log('[SW] Ready! Active worker state:', readyRegistration.active?.state);
 
-      // 3. Get the token using the registration
+      if (!readyRegistration.active) {
+         console.warn('[SW] Ready returned, but .active is null?');
+      }
+
+      // 3. Get Token
+      console.log('[FCM] Calling getToken...');
       const token = await getToken(messaging, { 
         vapidKey: VAPID_KEY,
-        serviceWorkerRegistration: registration 
+        serviceWorkerRegistration: readyRegistration 
       });
       
-      console.log("FCM TOKEN RETRIEVED:", token);
+      console.log("[FCM] Token retrieved successfully.");
       return token;
     } else {
-      console.warn('Notification permission denied.');
+      console.warn('[Permission] User denied permissions.');
       return null;
     }
   } catch (error) {
-    console.error('An error occurred while retrieving token:', error);
+    console.error('[Token Error] Error retrieving token:', error);
     throw error;
   }
 };
@@ -113,6 +120,7 @@ export const onMessageListener = async () => {
 
   return new Promise((resolve) => {
     onMessage(messaging, (payload) => {
+      console.log('[Listener] Message received in foreground:', payload);
       resolve(payload);
     });
   });

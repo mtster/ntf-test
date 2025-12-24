@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Bell, 
   Copy, 
@@ -10,9 +10,17 @@ import {
   Zap,
   Info,
   Share,
-  Trash2
+  Trash2,
+  Terminal,
+  XCircle
 } from 'lucide-react';
 import { requestNotificationPermission, onMessageListener, isFCMSupported } from './services/firebaseService';
+
+interface LogEntry {
+  timestamp: string;
+  type: 'info' | 'warn' | 'error';
+  message: string;
+}
 
 const App: React.FC = () => {
   const [permissionStatus, setPermissionStatus] = useState<NotificationPermission>(
@@ -27,57 +35,113 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [lastMessage, setLastMessage] = useState<any>(null);
+  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const logsEndRef = useRef<HTMLDivElement>(null);
 
-  // 1. Initial Checks & Auto-fetch
+  // --- Visual Debugger: Console Override ---
+  useEffect(() => {
+    const formatArgs = (args: any[]) => {
+      return args.map(arg => {
+        if (typeof arg === 'object') {
+          try {
+            return JSON.stringify(arg, null, 2);
+          } catch (e) {
+            return String(arg);
+          }
+        }
+        return String(arg);
+      }).join(' ');
+    };
+
+    const originalLog = console.log;
+    const originalWarn = console.warn;
+    const originalError = console.error;
+
+    console.log = (...args) => {
+      originalLog(...args);
+      addLog('info', formatArgs(args));
+    };
+
+    console.warn = (...args) => {
+      originalWarn(...args);
+      addLog('warn', formatArgs(args));
+    };
+
+    console.error = (...args) => {
+      originalError(...args);
+      addLog('error', formatArgs(args));
+    };
+
+    // Restore on unmount
+    return () => {
+      console.log = originalLog;
+      console.warn = originalWarn;
+      console.error = originalError;
+    };
+  }, []);
+
+  const addLog = (type: 'info' | 'warn' | 'error', message: string) => {
+    const timestamp = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second:'2-digit' });
+    setLogs(prev => [...prev, { timestamp, type, message }]);
+  };
+
+  // Scroll to bottom of logs
+  useEffect(() => {
+    if (logsEndRef.current) {
+      logsEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [logs]);
+
+  // --- Initial Checks ---
   useEffect(() => {
     let mounted = true;
 
     const checkEnvironment = async () => {
       try {
+        console.log('[App] Starting environment check...');
+        
         // Standalone check
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
         const isStandalone = (window.navigator as any).standalone === true;
         
         if (mounted) {
           if (isIOS && !isStandalone) {
+            console.warn('[App] iOS detected but not in standalone mode.');
             setIsIOSStandalone(false);
           }
         }
 
         // FCM Support Check
         const supported = await isFCMSupported();
+        console.log(`[App] FCM Supported: ${supported}`);
         
         if (mounted) {
           setIsSupported(supported);
           
           if (supported && 'Notification' in window) {
             setPermissionStatus(Notification.permission);
+            console.log(`[App] Current Permission: ${Notification.permission}`);
             
             // Restore from Local Storage
             const savedToken = localStorage.getItem('fcm_token');
             if (savedToken) {
+              console.log('[App] Restoring token from local storage.');
               setFcmToken(savedToken);
-            } else if (Notification.permission === 'granted') {
-              // Auto-fetch if granted but no token
-              // We use a small timeout to let the page settle, then fetch
-              setTimeout(() => {
-                if (mounted) handleEnableNotifications();
-              }, 500);
             }
           }
         }
       } catch (e) {
-        console.error("Initialization error:", e);
+        console.error("[App] Initialization error:", e);
         if (mounted) setIsSupported(false);
       }
     };
 
     checkEnvironment();
 
-    // Fallback: If support check hangs for more than 3 seconds, assume supported=false to show UI
+    // Fallback: If support check hangs
     const timeoutId = setTimeout(() => {
       if (mounted && isSupported === null) {
-        console.warn("Support check timed out, defaulting to false");
+        console.warn("[App] Support check timed out, defaulting to false");
         setIsSupported(false);
       }
     }, 3000);
@@ -91,14 +155,15 @@ const App: React.FC = () => {
   // Message Listener
   useEffect(() => {
     if (isSupported && permissionStatus === 'granted') {
+      console.log('[App] Setting up foreground message listener...');
       onMessageListener()
         .then((payload) => {
           if (payload) {
-            console.log('Foreground message received:', payload);
+            console.log('[App] Foreground message received:', payload);
             setLastMessage(payload);
           }
         })
-        .catch((err) => console.error('Failed to set message listener', err));
+        .catch((err) => console.error('[App] Failed to set message listener', err));
     }
   }, [isSupported, permissionStatus]);
 
@@ -107,14 +172,7 @@ const App: React.FC = () => {
     
     setIsRequesting(true);
     setError(null);
-
-    // Safety timeout prevents infinite loading state
-    const safetyTimeout = setTimeout(() => {
-        setIsRequesting((prev) => {
-          if (prev) setError("Request timed out. Please try again.");
-          return false;
-        });
-    }, 15000);
+    console.log('[App] User clicked "Get Token" / "Enable Notifications"');
 
     try {
       const token = await requestNotificationPermission();
@@ -122,29 +180,31 @@ const App: React.FC = () => {
         setFcmToken(token);
         localStorage.setItem('fcm_token', token);
         setPermissionStatus('granted');
+        console.log('[App] Token retrieval flow complete.');
       } else {
         const currentPerm = 'Notification' in window ? Notification.permission : 'default';
         setPermissionStatus(currentPerm);
         if (currentPerm === 'denied') {
-          setError('Permission denied. Please enable notifications in iOS Settings.');
+          setError('Permission denied. Go to Settings to enable.');
         }
       }
     } catch (err: any) {
-      console.error(err);
+      console.error('[App] Error in handleEnableNotifications:', err);
       setError(err.message || 'An unexpected error occurred.');
     } finally {
-      clearTimeout(safetyTimeout);
       setIsRequesting(false);
     }
   };
 
   const handleReset = () => {
     if (confirm("Clear token and reset state?")) {
+      console.log('[App] Resetting state...');
       setFcmToken('');
       setLastMessage(null);
       localStorage.removeItem('fcm_token');
       setError(null);
-      window.location.reload();
+      // Optional: don't reload to keep logs
+      // window.location.reload(); 
     }
   };
 
@@ -171,17 +231,19 @@ const App: React.FC = () => {
     );
   };
 
-  // Loading State
   if (isSupported === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#F2F2F7]">
-        <RefreshCcw className="animate-spin text-blue-600" size={32} />
+        <div className="text-center">
+          <RefreshCcw className="animate-spin text-blue-600 mx-auto mb-2" size={32} />
+          <p className="text-slate-500 text-sm">Initializing Environment...</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex flex-col safe-area-inset-top safe-area-inset-bottom">
+    <div className="min-h-screen flex flex-col safe-area-inset-top safe-area-inset-bottom pb-80">
       {/* Header */}
       <header className="px-6 py-8 flex flex-col gap-1">
         <h1 className="text-3xl font-bold tracking-tight text-slate-900">FCM Tester</h1>
@@ -191,19 +253,14 @@ const App: React.FC = () => {
       <main className="flex-1 px-4 space-y-6">
         {/* iOS Install Warning */}
         {!isIOSStandalone && (
-          <section className="bg-amber-50 rounded-3xl p-6 border border-amber-200 space-y-4 animate-in fade-in zoom-in-95 duration-300">
+          <section className="bg-amber-50 rounded-3xl p-6 border border-amber-200 space-y-4">
             <div className="flex items-center gap-3 text-amber-800">
               <Info size={24} className="shrink-0" />
               <h2 className="text-lg font-bold">iOS Install Required</h2>
             </div>
             <p className="text-sm text-amber-700 leading-relaxed">
-              To test Push Notifications on iOS 18+, you must add this app to your Home Screen.
+              Add to Home Screen to enable Push API.
             </p>
-            <ol className="text-sm text-amber-700 space-y-2 list-decimal list-inside font-medium">
-              <li className="flex items-center gap-2">Tap the Share icon <Share size={16} /></li>
-              <li>Select "Add to Home Screen"</li>
-              <li>Launch from Home Screen</li>
-            </ol>
           </section>
         )}
 
@@ -215,36 +272,34 @@ const App: React.FC = () => {
               <h2 className="text-lg font-bold">Not Supported</h2>
             </div>
             <p className="text-sm text-red-700 leading-relaxed">
-              Push notifications are not supported in this browser environment. If you are on iOS, ensure you have installed the app.
+              FCM is not supported here. Check the debug logs below.
             </p>
           </section>
         )}
 
-        {/* Permission Status Card */}
-        <section className={`bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4 ${!isSupported ? 'opacity-50 grayscale' : ''}`}>
+        {/* Permission & Action Card */}
+        <section className={`bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4 ${!isSupported ? 'opacity-50 grayscale pointer-events-none' : ''}`}>
           <div className="flex justify-between items-center">
             <h2 className="text-lg font-semibold text-slate-800">System Permission</h2>
             <StatusPill status={permissionStatus} />
           </div>
           
-          {(!fcmToken) && (
-            <button
-              onClick={handleEnableNotifications}
-              disabled={isRequesting || !isSupported}
-              className={`w-full py-4 rounded-2xl flex items-center justify-center gap-2 font-bold transition-all active:scale-95 ${
-                isRequesting || !isSupported
-                ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
-                : 'bg-blue-600 text-white shadow-lg shadow-blue-200 hover:bg-blue-700'
-              }`}
-            >
-              {isRequesting ? (
-                <RefreshCcw className="animate-spin" size={20} />
-              ) : (
-                <Bell size={20} />
-              )}
-              {isRequesting ? 'Retrieving Token...' : (permissionStatus === 'granted' ? 'Get Token' : 'Enable Notifications')}
-            </button>
-          )}
+          <button
+            onClick={handleEnableNotifications}
+            disabled={isRequesting}
+            className={`w-full py-4 rounded-2xl flex items-center justify-center gap-2 font-bold transition-all active:scale-95 ${
+              isRequesting
+              ? 'bg-slate-100 text-slate-400 cursor-not-allowed' 
+              : 'bg-blue-600 text-white shadow-lg shadow-blue-200 hover:bg-blue-700'
+            }`}
+          >
+            {isRequesting ? (
+              <RefreshCcw className="animate-spin" size={20} />
+            ) : (
+              <Bell size={20} />
+            )}
+            {isRequesting ? 'Processing...' : (permissionStatus === 'granted' ? 'Re-Fetch Token' : 'Enable Notifications')}
+          </button>
 
           {error && (
             <div className="p-4 bg-red-50 text-red-700 rounded-xl text-sm flex gap-2 items-start border border-red-100">
@@ -256,7 +311,7 @@ const App: React.FC = () => {
 
         {/* Token Section */}
         {fcmToken && (
-          <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <section className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold text-slate-800 flex items-center gap-2">
                 <Zap className="text-amber-500" size={18} />
@@ -266,14 +321,12 @@ const App: React.FC = () => {
                 <button 
                   onClick={handleReset}
                   className="p-2 hover:bg-red-50 hover:text-red-500 text-slate-400 rounded-full transition-colors"
-                  title="Reset"
                 >
                   <Trash2 size={20} />
                 </button>
                 <button 
                   onClick={copyToClipboard}
                   className="p-2 hover:bg-slate-100 rounded-full transition-colors"
-                  title="Copy Token"
                 >
                   {copied ? <CheckCircle className="text-green-500" size={20} /> : <Copy className="text-slate-400" size={20} />}
                 </button>
@@ -283,43 +336,53 @@ const App: React.FC = () => {
             <textarea
               readOnly
               value={fcmToken}
-              className="w-full h-32 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-mono text-slate-600 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              className="w-full h-48 p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-mono text-slate-600 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500/20"
               onClick={(e) => (e.target as HTMLTextAreaElement).select()}
             />
-            <p className="text-xs text-center text-slate-400">Token saved to local storage</p>
           </section>
         )}
 
         {/* Message History */}
         {lastMessage && (
-          <section className="bg-slate-900 rounded-3xl p-6 shadow-xl text-white space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <section className="bg-slate-900 rounded-3xl p-6 shadow-xl text-white space-y-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <span className="flex h-2 w-2 rounded-full bg-green-400 animate-pulse"></span>
-              Last Received Message
+              Message Received
             </h2>
-            <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
-              <p className="text-sm font-bold text-blue-300">{lastMessage?.notification?.title || 'No Title'}</p>
-              <p className="text-xs text-slate-300 mt-1">{lastMessage?.notification?.body || 'No Body'}</p>
-              <pre className="mt-3 text-[10px] bg-slate-950 p-2 rounded border border-slate-800 overflow-x-auto">
-                {JSON.stringify(lastMessage.data || {}, null, 2)}
-              </pre>
+            <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 overflow-hidden">
+               <pre className="text-[10px] whitespace-pre-wrap font-mono text-blue-200">
+                 {JSON.stringify(lastMessage, null, 2)}
+               </pre>
             </div>
           </section>
         )}
       </main>
 
-      {/* Footer Branding */}
-      <footer className="p-8 text-center mt-auto">
-        <div className="inline-flex items-center gap-2 text-slate-400 text-sm font-medium">
-          <span>Engineered for</span>
-          <img 
-            src="https://upload.wikimedia.org/wikipedia/commons/f/fa/Apple_logo_black.svg" 
-            alt="Apple" 
-            className="h-4 w-4 opacity-30" 
-          />
-          <span>iOS 18+</span>
+      {/* Visual Debug Console (Fixed Bottom) */}
+      <div className="fixed bottom-0 left-0 right-0 h-72 bg-slate-950 text-white border-t-2 border-slate-800 shadow-2xl flex flex-col z-50">
+        <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-800">
+          <div className="flex items-center gap-2">
+            <Terminal size={14} className="text-green-400" />
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Debug Console</span>
+          </div>
+          <button onClick={() => setLogs([])} className="text-[10px] px-2 py-1 bg-slate-800 rounded hover:bg-slate-700 text-slate-300">
+            Clear Logs
+          </button>
         </div>
-      </footer>
+        <div className="flex-1 overflow-y-auto p-4 font-mono text-[10px] space-y-1">
+          {logs.length === 0 && <span className="text-slate-600 italic">No logs yet...</span>}
+          {logs.map((log, i) => (
+            <div key={i} className={`flex gap-2 ${
+              log.type === 'error' ? 'text-red-400' : 
+              log.type === 'warn' ? 'text-amber-400' : 'text-slate-300'
+            }`}>
+              <span className="text-slate-600 shrink-0">[{log.timestamp}]</span>
+              <span className="break-all">{log.message}</span>
+            </div>
+          ))}
+          <div ref={logsEndRef} />
+        </div>
+      </div>
     </div>
   );
 };
